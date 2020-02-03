@@ -9,18 +9,33 @@
 
 #Load required libraries 
 pacman:: p_load("rstudioapi", "readr","dplyr", "tidyr", "ggplot2", "plotly", "data.table", "reshape2", "caret", 
-                "randomForest", "bbplot", "doMC", "bbplot", "parallel", "iterators", "ranger", "tidyverse", "class",
-                "doParallel", "arules")
+                "randomForest", "doMC", "bbplot", "parallel", "iterators", "ranger", "tidyverse", "class",
+                "doParallel", "arules","ggthemes","devtools")
 
 # Import Data
-setwd("/Users/matiasbarra/Documents/Data_Analytics_Course/3_IoT_Analytics/3.3_Wifi_locationing")
-data_train <- read.csv("WiFi_Locationing/data/trainingData.csv", header = T, sep = ",", na='100')
-data_validation <- read.csv("WiFi_Locationing/data/validationData.csv", header = T, sep = ",", na='100')
+#### Ignacio: Matias, avoid making use of this approach as it is computer dependant
+#### In other words, this will not work into another computer as the new computer
+#### doesn't need to have the same OS and same folder tree.
+#setwd("/Users/matiasbarra/Documents/Data_Analytics_Course/3_IoT_Analytics/3.3_Wifi_locationing")
+#### You can use the function "list.files", and then use the function "grep"
+#### to look for your script.
+
+loc   <- grep("data_exploration.R",list.files(recursive=TRUE),value=TRUE)
+iloc  <- which(unlist(gregexpr("/data_exploration.R$",loc)) != -1)
+myloc <- paste(getwd(),loc[iloc],sep="/")
+setwd(substr(myloc,1,nchar(myloc)-18))
+
+#data_train <- read.csv("WiFi_Locationing/data/trainingData.csv", header = T, sep = ",", na='100')
+#data_validation <- read.csv("WiFi_Locationing/data/validationData.csv", header = T, sep = ",", na='100')
+
+#### Now we're in the "src", we need to read one level up.
+data_train <- read.csv("../data/trainingData.csv", header = T, sep = ",", na='100')
+data_validation <- read.csv("../data/validationData.csv", header = T, sep = ",", na='100')
 
 # Check if we have the same names of variables      #<-Yes, we can merge both data sets
 "%ni%" <- Negate("%in%")
-names(data_train[which(names(data_train) %ni% names(data_train))])   #<-0
-names(data_validation[which(names(data_validation) %ni% names(data_validation))])   #<-0
+#names(data_train[which(names(data_train) %ni% names(data_train))])   #<-0
+#names(data_validation[which(names(data_validation) %ni% names(data_validation))])   #<-0
 
 # Use distinct to Remove repeated rows in data_train and data_validation             
 data_train <- dplyr::distinct(data_train)       #<- 19937 to 19300
@@ -38,7 +53,8 @@ data_full <- bind_rows(data_train, data_validation)
 data_full$TIMESTAMP <- as.POSIXct(data_full$TIMESTAMP, origin = "1970-01-01")
 
 #-Recode Building factor level names
-data_full$BUILDINGID <- recode(data_full$BUILDINGID, '0'=1, '1'=2, '2'=3)
+#### Ignacio: Very dangerous thing to do as you already know ;)
+#data_full$BUILDINGID <- recode(data_full$BUILDINGID, '0'=1, '1'=2, '2'=3)
 
 #Changing timestamp variables to factor using a For
 vars_to_factor <- c("FLOOR", "BUILDINGID", "SPACEID", "RELATIVEPOSITION", "USERID", "PHONEID")
@@ -66,19 +82,21 @@ data_full$WAP_num <- apply(data_full[,1:520], 1,
 
 ####------------------------------------------------ Data Exploration --------------------####
 
+#### Ignacio: Matias, as you know this dataset is 3D. Therefore use another tool
+#### to show the 3D out of it like plot_ly
 #plot latitude and longitude, color train and test values differently 
-ggplot(data_full) + 
-  geom_hline(yintercept = 4864900, colour = "white") +
-  geom_point(aes(x = LONGITUDE, y = LATITUDE, colour = type), size = 1.5) +
-  bbc_style() +
-  theme(legend.position = "right", 
-        plot.subtitle=element_text(color="grey", size = 15),
-        axis.text.x = element_text(hjust = 1, angle = 0, size = 14),
-        axis.text.y = element_text(hjust = 1, angle = 90, size = 14)) +
-  labs(title="Latitude and Longitude for each observation",
-       subtitle = "An overview of how train and validation positions are situated") +
-  scale_x_continuous(breaks = c(-7500), labels = c("Longitude")) +
-  scale_y_continuous(breaks = c(4864900),labels = c("Latitude"))
+# ggplot(data_full) + 
+#   geom_hline(yintercept = 4864900, colour = "white") +
+#   geom_point(aes(x = LONGITUDE, y = LATITUDE, colour = type), size = 1.5) +
+# #  bbc_style() 
+#   theme(legend.position = "right", 
+#         plot.subtitle=element_text(color="grey", size = 15),
+#         axis.text.x = element_text(hjust = 1, angle = 0, size = 14),
+#         axis.text.y = element_text(hjust = 1, angle = 90, size = 14)) +
+#   labs(title="Latitude and Longitude for each observation",
+#        subtitle = "An overview of how train and validation positions are situated") +
+#   scale_x_continuous(breaks = c(-7500), labels = c("Longitude")) +
+#   scale_y_continuous(breaks = c(4864900),labels = c("Latitude"))
 
 #Wifi Measurements - FULL SET
 plot_ly(data_full, x= ~LONGITUDE,y= ~LATITUDE,z= ~FLOOR, 
@@ -98,6 +116,7 @@ plot_ly(data_full, x= ~LONGITUDE,y= ~LATITUDE,z= ~FLOOR,
 
 #Box Plots 
 #-Distribution of WAP count by building- boxplot
+#### Ignacio: Cool plot, this tells you that the coverage is not uniform.
 box_build <-  ggplot(data_full, aes(x=BUILDINGID, y=WAP_num)) + 
                 geom_boxplot(fill='lightgreen') +
                 theme(text = element_text(size=14)) +
@@ -117,7 +136,9 @@ hist_bf <-  ggplot(data_full, aes(x=WAP_num, fill=FLOOR)) + geom_bar() +
                 labs(x="Number of WAP's Detected by Building", y= 'Counts by Building Floor') +
                 theme(panel.border=element_rect(colour='black', fill=NA))
 
-ggplotly(box_build)
+#### Ignacio: Incorrect variable to plot :P
+#ggplotly(box_build)
+ggplotly(hist_bf)
 ####------------------------------------------- Feature Engineering --------------------####
 
 #Removing unnecessary columns
@@ -131,10 +152,13 @@ rm(vars_to_delete)
 # remove WAP_num because I don't need this variable anymore
 data_full$WAP_num <- NULL
 
-#creating a column with the highest WAP and highest Signal detected.
+
+##creating a column with the highest WAP and highest Signal detected.
+#### Ignacio: This is the way to get all the columns which names contains the 
+#### the word "WAP"
 WAPS<-grep("WAP", names(data_full), value=T) #value = TRUE returns the values instead of the vectors
 
-# Craete new variables HighWAP and HighRSSI
+# Create new variables HighWAP and HighRSSI
 data_full<-data_full %>%
   mutate(HighWAP=NA)
 
@@ -161,9 +185,15 @@ data_full<-data_full %>%
 data_full[is.na(data_full)] <- -110
 
 #Changing timestamp variables to factor using a For
+#### Ignacio: This is ok, but you need to be cautious in doing this step as
+#### the "as.factor" function ONLY "see" the values it takes the variable
+#### enclosed within parentehses. Thus, if in a new dataset you have more 
+#### posible values than in you sampled data, you will get an error.
 vars_to_factor <- c("HighWAP", "HighWAP2", "HighWAP3", "HighWAP4")
 for (v in vars_to_factor) {
-  data_full[,v] <- as.factor(data_full[,v])
+#  data_full[,v] <- as.factor(data_full[,v])
+   data_full[,v] <- factor(data_full[,v],levels = colnames(data_full[,1:520]),
+                           labels = colnames(data_full[,1:520]))
 }
 rm(vars_to_factor)
 
@@ -173,8 +203,10 @@ data_full <-  data_full %>% select(last_col, everything())
 rm(last_col)
 
 #saving data_full in case I have to reload the 
-saveRDS(data_full, file = "WiFi_Locationing/data/data_full.rds")
-data_full <- readRDS("WiFi_Locationing/data/data_full.rds")
+#saveRDS(data_full, file = "WiFi_Locationing/data/data_full.rds")
+saveRDS(data_full, file = "../data/data_full.rds")
+#data_full <- readRDS("WiFi_Locationing/data/data_full.rds")
+data_full <- readRDS("../data/data_full.rds")
 
 # Remove WAPS with no variance ---- I didn't use this preprocess in my model
 # Select Relevant WAPS
@@ -185,7 +217,8 @@ db_full<-data_full[-which(WAPS_VarTrain$zeroVar==TRUE |
                               WAPS_VarTest$zeroVar==TRUE)]   # 530 -> 322 variables
 rm(WAPS_VarTrain, WAPS_VarTest)
 # For modeling we keep data_full df, we didn't use db_full, but save it for future.
-db_full <- saveRDS(db_full, file = "WiFi_Locationing/data/db_full.rds")
+#db_full <- saveRDS(db_full, file = "WiFi_Locationing/data/db_full.rds")
+db_full <- saveRDS(db_full, file = "../data/db_full.rds")
 
 ## Create a funtiont to count WAPs with signal higher than -65 (good signal) and lower than -65 (poor signal)
 signal_count <- function(v) {
