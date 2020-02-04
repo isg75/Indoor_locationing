@@ -233,8 +233,8 @@ data_full$intensity <- discretize(data_full[,531], method = "fixed", breaks = c(
                                 ordered_result = FALSE, infinity = FALSE, onlycuts = FALSE)
 
 
-saveRDS(data_full, file = "WiFi_Locationing/data/data_full.rds")
-
+#saveRDS(data_full, file = "WiFi_Locationing/data/data_full.rds")
+saveRDS(data_full, file = "../data/data_full.rds")
 
 
 

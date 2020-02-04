@@ -2,27 +2,31 @@
 pacman:: p_load("rstudioapi", "readr","dplyr", "tidyr", "ggplot2", "plotly", 
                 "data.table", "reshape2", "caret", "randomForest", "bbplot", 
                 "doMC", "bbplot", "parallel", "iterators", "ranger", "tidyverse", "class",
-                "doParallel", "arules")
+                "doParallel", "arules","kernlab")
 
-data_full <- readRDS("WiFi_Locationing/data/data_full.rds")
+data_full <- readRDS("../data/data_full.rds")
 
 #------ Split Data before modeling -----
 data_full_split<-split(data_full, data_full$type) #split by type
 list2env(data_full_split, envir=.GlobalEnv) #sent train and test df to global enviroment
 rm(data_full_split) #remove data_full_split
 
+#### Ignacio: Matias, why do make copies of the datasets? You may exhaust memory. 
 db_train <- train
 db_test <- test
+
 
 ####-------------- Preparing for modeling -----------------------------------------------------####
 
 #-Assign values in seeds agrument of trainControl
 set.seed(123)
 # Prepare Parallel Process
-getDoParWorkers() #Firstly check 
-cluster <- makeCluster(detectCores() - 1)
-registerDoParallel(cluster)
-stopCluster(cluster)
+#### Ignacio: Matias, why you included such lines if at the end you don't use
+#### the virtual cluster?
+# getDoParWorkers() #Firstly check 
+# cluster <- makeCluster(detectCores() - 1)
+# registerDoParallel(cluster)
+# stopCluster(cluster)
 
 #-Define parameters in trainControl
 fitControl <- trainControl(method = "repeatedcv", # Cross Validation
@@ -35,8 +39,10 @@ fitControl <- trainControl(method = "repeatedcv", # Cross Validation
 svm_B1 <- caret::train(BUILDINGID~HighWAP + HighWAP2 + HighWAP3, data=db_train,
                         method='svmLinear',
                         trControl = fitControl)
-# saveRDS(svm_B_1, "../WiFi_Locationing/models/svm_B_1.rds")
-svm_B1 <- readRDS("WiFi_Locationing/models/svm_B1.rds")
+#### Ignacio: Adjusted relative path
+saveRDS(svm_B1, "../models/svm_B1.rds")
+#svm_B1 <- readRDS("WiFi_Locationing/models/svm_B1.rds")
+svm_B1 <- readRDS("../models/svm_B1.rds")
 # test
 predic_B_1_test <- predict(svm_B1, db_test)
 B1_cMatrix_svm <- confusionMatrix(predic_B_1_test, db_test$BUILDINGID)
@@ -45,10 +51,14 @@ B1_cMatrix_svm <- confusionMatrix(predic_B_1_test, db_test$BUILDINGID)
 
 #------------------------------------------------------------------------------//   KNN Algorithm
 # test
+#### Ignacio: Why did you use k=5? Do you have some previous computations which
+#### shows you that this is the best value?
 system.time(kNN_B2 <- knn(db_train[,11:530], db_test[,11:530], cl =  db_train$BUILDINGID, k = 5))
 # 
-# saveRDS(kNN_B1_test, "models/kNN_B1_test.rds")
-kNN_B2 <- readRDS("WiFi_Locationing/models/kNN_B2.rds")
+#kNN_B2 <- readRDS("WiFi_Locationing/models/kNN_B2.rds")
+#### Ignacio: Adjusted relative path.
+saveRDS(kNN_B2,"../models/kNN_B2.rds")
+kNN_B2 <- readRDS("../models/kNN_B2.rds")
 B2_cMatrix_knn <- confusionMatrix(kNN_B2, db_test$BUILDINGID)
 #   Accuracy   Kappa    
 #   0.9973    0.9957
@@ -59,8 +69,11 @@ B2_cMatrix_knn <- confusionMatrix(kNN_B2, db_test$BUILDINGID)
 F1_SVM <- caret::train(FLOOR~HighWAP + HighWAP2 + HighWAP3, data=db_train,
                         method='svmLinear',
                         trControl = fitControl)
-saveRDS(F1_SVM, "WiFi_Locationing/models/svm_F1.rds")
-svm_F1<- readRDS("WiFi_Locationing/models/svm_F1.rds")
+#### Ignacio: Adjusted relative paths
+#saveRDS(F1_SVM, "WiFi_Locationing/models/svm_F1.rds")
+saveRDS(F1_SVM, "../models/svm_F1.rds")
+#svm_F1<- readRDS("WiFi_Locationing/models/svm_F1.rds")
+svm_F1<- readRDS("../models/svm_F1.rds")
 
 # test
 F1_SVM_pred_test <- predict(svm_F1, db_test)
@@ -78,7 +91,9 @@ system.time(rf_F1<-randomForest(y=db_train$FLOOR,x=db_train[,12:530],importance=
                                 method="rf", ntree=100, mtry=44))
 
 # saveRDS(rf_F1, "models/rf_F1.rds")
-rf_F1 <- readRDS("WiFi_Locationing/models/rf_F1.rds")
+saveRDS(rf_F1, "../models/rf_F1.rds")
+# rf_F1 <- readRDS("WiFi_Locationing/models/rf_F1.rds")
+rf_F1 <- readRDS("../models/rf_F1.rds")
 ##------------------------------------ test
 rf_pred_F1_test <- predict(rf_F1, db_test)
 F2_cMatrix_rf <- confusionMatrix(rf_pred_F1_test, db_test$FLOOR)
@@ -90,8 +105,10 @@ F2_cMatrix_rf <- confusionMatrix(rf_pred_F1_test, db_test$FLOOR)
 ###---------------------------------------------------------------------------/  KNN 
 system.time(knn_long_1 <- knnreg(LONGITUDE~., data = db_train[,c(1,11:530)]))
 
-saveRDS(knn_long_1, "../WiFi_Locationing/models/knn_long_1.rds")
-knn_long_1 <- readRDS("WiFi_Locationing/models/knn_long_1.rds")
+#saveRDS(knn_long_1, "../WiFi_Locationing/models/knn_long_1.rds")
+saveRDS(knn_long_1, "../models/knn_long_1.rds")
+#knn_long_1 <- readRDS("WiFi_Locationing/models/knn_long_1.rds")
+knn_long_1 <- readRDS("../models/knn_long_1.rds")
 
 pred_long_1_test <- predict(knn_long_1, db_test)
 postRsmpl_long_1_test <- postResample(pred_long_1_test, db_test$LONGITUDE)
@@ -112,8 +129,10 @@ bestmtry_rf_1 <- tuneRF(db_train[WAPs], db_train$LONGITUDE, ntreeTry=100,
 system.time(rf_LON_1 <-randomForest(y=db_train$LONGITUDE,x=db_train[WAPs],importance=T,
                                     method="rf", ntree=100, mtry=87))
 
-saveRDS(rf_LON_1, "WiFi_Locationing/models/rf_LON_1.rds")
-rf_LON_1 <- readRDS("WiFi_Locationing/models/rf_LON_1.rds")
+#saveRDS(rf_LON_1, "WiFi_Locationing/models/rf_LON_1.rds")
+saveRDS(rf_LON_1, "../models/rf_LON_1.rds")
+#rf_LON_1 <- readRDS("WiFi_Locationing/models/rf_LON_1.rds")
+rf_LON_1 <- readRDS("../models/rf_LON_1.rds")
 ##------------------------------------ test
 rf_pred_LON_1_test <- predict(rf_LON_1, db_test)
 postRsmpl_rf_pred_LON_1_test <- postResample(rf_pred_LON_1_test, db_test$LONGITUDE)
@@ -133,8 +152,10 @@ error_LON_rf<- db_test$LONGITUDE - rf_pred_LON_1_test
 
 system.time(knn_LAT_1 <- knnreg(LATITUDE~., data = db_train[,c(2,11:530)]))
 
-saveRDS(knn_LAT_1, "WiFi_Locationing/models/knn_LAT_1.rds")
-knn_LAT_1 <- readRDS("WiFi_Locationing/models/knn_LAT_1.rds")
+# saveRDS(knn_LAT_1, "WiFi_Locationing/models/knn_LAT_1.rds")
+saveRDS(knn_LAT_1, "../models/knn_LAT_1.rds")
+# knn_LAT_1 <- readRDS("WiFi_Locationing/models/knn_LAT_1.rds")
+knn_LAT_1 <- readRDS("../models/knn_LAT_1.rds")
 
 # kNN_FL_tr <- readRDS("../WiFi_Locationing/models/kNN_FL_tr.rds")
 predic_LAT_1_test <- predict(knn_LAT_1, db_test)
@@ -150,10 +171,12 @@ bestmtry_rf_LAT_2 <- tuneRF(db_train[WAPs], db_train$LATITUDE, ntreeTry=100,
 
 # Train a random forest using that mtry
 system.time(rf_LAT_2 <-randomForest(y=db_train$LATITUDE,x=db_train[WAPs],importance=T,
-                                    method="rf", ntree=100, mtry=173))
+                                    method="rf", ntree=100, mtry=87))
 
-saveRDS(rf_LAT_2, "WiFi_Locationing/models/rf_LAT_2.rds")
-rf_LAT_2 <- readRDS("WiFi_Locationing/models/rf_LAT_2.rds")
+#saveRDS(rf_LAT_2, "WiFi_Locationing/models/rf_LAT_2.rds")
+saveRDS(rf_LAT_2, "../models/rf_LAT_2.rds")
+#rf_LAT_2 <- readRDS("WiFi_Locationing/models/rf_LAT_2.rds")
+rf_LAT_2 <- readRDS("../models/rf_LAT_2.rds")
 ##------------------------------------ test
 rf_pred_LAT_2_test <- predict(rf_LAT_2, db_test)
 postRsmpl_rf_pred_LAT_2_test <- postResample(rf_pred_LAT_2_test, db_test$LATITUDE)
