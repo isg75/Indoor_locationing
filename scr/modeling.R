@@ -283,20 +283,8 @@ error_LAT$error_disc <- discretize(error_LAT$Value, method = "fixed", breaks = c
                                    right = FALSE, dig.lab = 3, ordered_result = FALSE, infinity = FALSE, onlycuts = FALSE)
 
 error_LON_tbl <- as_tibble(error_LON)
-  # LON_kNN_errLess5mts <- dplyr::filter(error_LON_tbl, error_disc == ">5", Model == "error_LON_knn") 
-  # LON_rf_errLess5mts <- dplyr::filter(error_LON_tbl, error_disc == ">5", Model == "error_LON_rf")
-  # LON_kNN_errBtw5_10mts <- dplyr::filter(error_LON_tbl, error_disc == "5-10", Model == "error_LON_knn") 
-  # LON_rf_errBtw5_10mts <- dplyr::filter(error_LON_tbl, error_disc == "5-10", Model == "error_LON_rf")
-  # LON_kNN_errBtw10_20mts <- dplyr::filter(error_LON_tbl, error_disc == "10-20", Model == "error_LON_knn") 
-  # LON_rf_errBtw10_20mts <- dplyr::filter(error_LON_tbl, error_disc == "10-20", Model == "error_LON_rf")
-  # 
+
 error_LAT_tbl <- as_tibble(error_LAT)
-  # LAT_kNN_errLess5mts <- dplyr::filter(error_LAT_tbl, error_disc == ">5", Model == "error_LAT_knn") 
-  # LAT_rf_errLess5mts <- dplyr::filter(error_LAT_tbl, error_disc == ">5", Model == "error_LAT_rf")
-  # LAT_kNN_errBtw5_10mts <- dplyr::filter(error_LAT_tbl, error_disc == "5-10", Model == "error_LAT_knn") 
-  # LAT_rf_errBtw5_10mts <- dplyr::filter(error_LAT_tbl, error_disc == "5-10", Model == "error_LAT_rf")
-  # LAT_kNN_errBtw10_20mts <- dplyr::filter(error_LAT_tbl, error_disc == "10-20", Model == "error_LAT_knn") 
-  # LAT_rf_errBtw10_20mts <- dplyr::filter(error_LAT_tbl, error_disc == "10-20", Model == "error_LAT_rf")
 
 ## Plotting distribution of less 10 meters Errors in LONGITUDE predictions  
 LON_errLess10mts <- dplyr::filter(error_LON_tbl, error_disc == ">5" | error_disc == "5-10")
@@ -352,5 +340,20 @@ median(abs(error_LAT_knn)) #median 3.07
 # RF
 mean(abs(error_LAT_rf)) # mean 6.55
 median(abs(error_LAT_rf)) #median 3.99
+
+#### TO DO: Very clean code, although it could be made sligthly more efficient.
+#### As you can see, I placed most of the preprocessing steps inside the function
+#### "pre_proc" which I only need to call once when I read a dataset in order to
+#### start working. 
+#### On the other hand, I was missing a bit of extracting conclussions from the
+#### data analysis you do on several variables. For example: what conclussions
+#### can you get from the comparison of the "train" and "validation" sets?
+#### What is telling you?
+#### On the model selection: You did a good job inspecting the errors, but again
+#### you didn't draw conclussions out of it. Which model do you will use
+#### for bussiness production and why? 
+#### Did you find any problems on the data? How you will fix it? How they are
+#### affecting the predictions of the models?
+
 
 

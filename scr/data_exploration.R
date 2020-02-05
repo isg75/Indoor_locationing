@@ -10,7 +10,7 @@
 #Load required libraries 
 pacman:: p_load("rstudioapi", "readr","dplyr", "tidyr", "ggplot2", "plotly", "data.table", "reshape2", "caret", 
                 "randomForest", "doMC", "bbplot", "parallel", "iterators", "ranger", "tidyverse", "class",
-                "doParallel", "arules","ggthemes","devtools")
+                "doParallel", "arules","ggthemes","devtools","magrittr")
 
 # Import Data
 #### Ignacio: Matias, avoid making use of this approach as it is computer dependant
@@ -49,54 +49,134 @@ data_validation$type <- "test"
 data_full <- bind_rows(data_train, data_validation)
 
 #### Changing Valiables Format ####
-#Changing timestamp variables to POSIXct
-data_full$TIMESTAMP <- as.POSIXct(data_full$TIMESTAMP, origin = "1970-01-01")
 
-#-Recode Building factor level names
-#### Ignacio: Very dangerous thing to do as you already know ;)
-#data_full$BUILDINGID <- recode(data_full$BUILDINGID, '0'=1, '1'=2, '2'=3)
+#### Preprocessing
+pre_proc <- function(df) {
+  
+  #Changing timestamp variables to POSIXct
+  df$TIMESTAMP <- as.POSIXct(df$TIMESTAMP, origin = "1970-01-01")
+  
+  # Changing timestamp variables to factor using DPLYR (More eficiently and faster)
+  vars_to_factor <- c("FLOOR", "BUILDINGID", "SPACEID", "RELATIVEPOSITION", "USERID", "PHONEID")
+  vars_to_numeric <- c("LONGITUDE", "LATITUDE")
+  
+  df %<>% mutate_each_(funs(factor), vars_to_factor) %>%
+          mutate_each_(funs(as.numeric), vars_to_numeric)
+  
+  #   for (v in vars_to_factor) {
+  #   df[,v] <- as.factor(df[,v])
+  # }
+  # rm(vars_to_factor)
+  
+  # # Changing timestamp variables to factor using a lapply funtion
+  # vars_to_numeric <- c("LONGITUDE", "LATITUDE")
+  # df[,vars_to_numeric] <- lapply(df[,vars_to_numeric], as.numeric)
+  # rm(vars_to_numeric)
+  
+  # Use Paste function to create an ID for BuildingID + Floor and convert the new column to factor
+  df <-  within(df, bfID <- paste(BUILDINGID, FLOOR, sep = '_'))
+  df$bfID <- as.factor(df$bfID)
+  
+  # Deleting columns and rows wich contain only NAs
+  df <- df[-which(apply(df[,c(1:520)],1,function(x) all(is.na(x)==T))==TRUE),]
+  
+  # Add count of WAP's detected as feature
+  df$WAP_num <- apply(df[,1:520], 1,
+                             function(x) length(which(!is.na(x))))
 
-#Changing timestamp variables to factor using a For
-vars_to_factor <- c("FLOOR", "BUILDINGID", "SPACEID", "RELATIVEPOSITION", "USERID", "PHONEID")
-for (v in vars_to_factor) {
-  data_full[,v] <- as.factor(data_full[,v])
+  # Using regular expression
+  WAPS <- colnames(df)[which(unlist(gregexpr("^WAP\\d+",colnames(df)))==1)]
+  
+  #WAPS <- grep("WAP", colnames(df), value=T) #value = TRUE returns the values instead of the vectors
+
+  # # Create new variables HighWAP and HighRSSI
+  # df <- df %>%
+  #   mutate(HighWAP=NA)
+  
+  # # Gets which columns has the highest value for a fingerprint
+  # df <- df %>% 
+  #   mutate(HighWAP=colnames(df[WAPS])[apply(df[WAPS],1,which.max)])
+  
+  # Function to find 1st, 2nd, 3rd highest WAPs and RSSI values 
+  maxn <- function(n) function(x) order(x, decreasing = TRUE)[n]
+  
+  # # Set 1st highest WAP number
+  # df <- df %>% 
+  #   mutate(HighWAP=colnames(df[WAPS])[apply(df[,WAPS],1,which.max)])
+  
+  df %<>% 
+     mutate(HighWAP=colnames(df[WAPS])[apply(df[WAPS],1,maxn(1))],
+            HighWAP2=colnames(df[WAPS])[apply(df[WAPS],1,maxn(2))],
+            HighWAP3=colnames(df[WAPS])[apply(df[WAPS],1,maxn(3))],
+            HighWAP4=colnames(df[WAPS])[apply(df[WAPS],1,maxn(4))])
+  
+  # # Set 2nd highest WAP number
+  # df %>% 
+  #   mutate(HighWAP2=colnames(df[WAPS])[apply(df[WAPS],1,maxn(2))])
+  # 
+  # # Set 3rd highest WAP number
+  # df %>% 
+  #   mutate(HighWAP3=colnames(df[WAPS])[apply(df[WAPS],1,maxn(3))])
+  # 
+  # # Set 4th highest WAP number
+  # df %>% 
+  #   mutate(HighWAP4=colnames(df[WAPS])[apply(df[WAPS],1,maxn(4))])
+  
+  # convert NA's to -110
+  df[is.na(df)] <- -110
+  
+  vars_to_factor <- c("HighWAP", "HighWAP2", "HighWAP3", "HighWAP4")
+  
+  df %<>% mutate_each_(funs(factor), vars_to_factor) 
+  
+  # for (v in vars_to_factor) {
+  #   #  data_full[,v] <- as.factor(data_full[,v])
+  #   df[,v] <- factor(df[,v],levels = colnames(df[,1:520]),
+  #                           labels = colnames(df[,1:520]))
+  # }
+  # rm(vars_to_factor)
+  
+  # reorder columns 
+  last_col <- c(521:530)
+  df <-  df %>% select(last_col, everything())
+  rm(last_col)
+  
+  return(df)
 }
-rm(vars_to_factor)
 
-#Changing timestamp variables to factor using a lapply funtion
-vars_to_numeric <- c("LONGITUDE", "LATITUDE")
-data_full[,vars_to_numeric] <- lapply(data_full[,vars_to_numeric], as.numeric)
-rm(vars_to_numeric)
+data_full <- pre_proc(data_full)
 
-# Use Paste function to create an ID for BuildingID + Floor and convert the new column to factor
-data_full <-  within(data_full, bfID <- paste(BUILDINGID, FLOOR, sep = '_'))
-data_full$bfID <- as.factor(data_full$bfID)
-
-#Deleting columns and rows wich contain only NAs
-data_full <- data_full[-which(apply(data_full[,c(1:520)],1,function(x) all(is.na(x)==T))==TRUE),]
-#Only delete 73 rows, there is no columns containig all NAs
-
-# Add count of WAP's detected as feature
-data_full$WAP_num <- apply(data_full[,1:520], 1,
-                           function(x) length(which(!is.na(x))))  
+# data_full$TIMESTAMP <- as.POSIXct(data_full$TIMESTAMP, origin = "1970-01-01")
+# 
+# #-Recode Building factor level names
+# #### Ignacio: Very dangerous thing to do as you already know ;)
+# #data_full$BUILDINGID <- recode(data_full$BUILDINGID, '0'=1, '1'=2, '2'=3)
+# 
+# #Changing timestamp variables to factor using a For
+# vars_to_factor <- c("FLOOR", "BUILDINGID", "SPACEID", "RELATIVEPOSITION", "USERID", "PHONEID")
+# for (v in vars_to_factor) {
+#   data_full[,v] <- as.factor(data_full[,v])
+# }
+# rm(vars_to_factor)
+# 
+# #Changing timestamp variables to factor using a lapply funtion
+# vars_to_numeric <- c("LONGITUDE", "LATITUDE")
+# data_full[,vars_to_numeric] <- lapply(data_full[,vars_to_numeric], as.numeric)
+# rm(vars_to_numeric)
+# 
+# # Use Paste function to create an ID for BuildingID + Floor and convert the new column to factor
+# data_full <-  within(data_full, bfID <- paste(BUILDINGID, FLOOR, sep = '_'))
+# data_full$bfID <- as.factor(data_full$bfID)
+# 
+# #Deleting columns and rows wich contain only NAs
+# data_full <- data_full[-which(apply(data_full[,c(1:520)],1,function(x) all(is.na(x)==T))==TRUE),]
+# #Only delete 73 rows, there is no columns containig all NAs
+# 
+# # Add count of WAP's detected as feature
+# data_full$WAP_num <- apply(data_full[,1:520], 1,
+#                            function(x) length(which(!is.na(x))))  
 
 ####------------------------------------------------ Data Exploration --------------------####
-
-#### Ignacio: Matias, as you know this dataset is 3D. Therefore use another tool
-#### to show the 3D out of it like plot_ly
-#plot latitude and longitude, color train and test values differently 
-# ggplot(data_full) + 
-#   geom_hline(yintercept = 4864900, colour = "white") +
-#   geom_point(aes(x = LONGITUDE, y = LATITUDE, colour = type), size = 1.5) +
-# #  bbc_style() 
-#   theme(legend.position = "right", 
-#         plot.subtitle=element_text(color="grey", size = 15),
-#         axis.text.x = element_text(hjust = 1, angle = 0, size = 14),
-#         axis.text.y = element_text(hjust = 1, angle = 90, size = 14)) +
-#   labs(title="Latitude and Longitude for each observation",
-#        subtitle = "An overview of how train and validation positions are situated") +
-#   scale_x_continuous(breaks = c(-7500), labels = c("Longitude")) +
-#   scale_y_continuous(breaks = c(4864900),labels = c("Latitude"))
 
 #Wifi Measurements - FULL SET
 plot_ly(data_full, x= ~LONGITUDE,y= ~LATITUDE,z= ~FLOOR, 
@@ -129,7 +209,7 @@ ggplotly(box_build)
 #Histograms 
 #Distribution of WAP count by building and floor
 hist_bf <-  ggplot(data_full, aes(x=WAP_num, fill=FLOOR)) + geom_bar() + 
-# ver como hacer density line  ->              stat_density(aes(group = BUILDINGID, color = "red"),position="identity",geom="line")+
+# ver como hacer density line  -> stat_density(aes(group = BUILDINGID, color = "red"),position="identity",geom="line")+
                 facet_grid(BUILDINGID~.) +
                 theme(text = element_text(size=14)) +
                 ggtitle('Distribution of Detected Wireless Access Points by Building and Floor') +
@@ -139,68 +219,69 @@ hist_bf <-  ggplot(data_full, aes(x=WAP_num, fill=FLOOR)) + geom_bar() +
 #### Ignacio: Incorrect variable to plot :P
 #ggplotly(box_build)
 ggplotly(hist_bf)
+
 ####------------------------------------------- Feature Engineering --------------------####
 
-#Removing unnecessary columns
-vars_to_delete <- c("SPACEID", "RELATIVEPOSITION", "USERID", "PHONEID", "TIMESTAMP")
-for (c in vars_to_delete) {
-  data_full[,vars_to_delete] <- NULL
-}
-rm(vars_to_delete)
-
-
-# remove WAP_num because I don't need this variable anymore
-data_full$WAP_num <- NULL
-
-
-##creating a column with the highest WAP and highest Signal detected.
-#### Ignacio: This is the way to get all the columns which names contains the 
-#### the word "WAP"
-WAPS<-grep("WAP", names(data_full), value=T) #value = TRUE returns the values instead of the vectors
-
-# Create new variables HighWAP and HighRSSI
-data_full<-data_full %>%
-  mutate(HighWAP=NA)
-
-#gets which columns has the highest value for a fingerprint
-data_full<-data_full %>% 
-  mutate(HighWAP=colnames(data_full[WAPS])[apply(data_full[WAPS],1,which.max)])
-
-#Function to find 1st, 2nd, 3rd highest WAPs and RSSI values 
-maxn <- function(n) function(x) order(x, decreasing = TRUE)[n]
-
-#Set 2nd highest WAP number
-data_full <- data_full %>% 
-  mutate(HighWAP2=colnames(data_full[WAPS])[apply(data_full[WAPS],1,maxn(2))])
-
-#Set 3rd highest WAP number
-data_full<-data_full %>% 
-  mutate(HighWAP3=colnames(data_full[WAPS])[apply(data_full[WAPS],1,maxn(3))])
-
-#Set 4th highest WAP number
-data_full<-data_full %>% 
-  mutate(HighWAP4=colnames(data_full[WAPS])[apply(data_full[WAPS],1,maxn(4))])
-
-#convert NA's to -110
-data_full[is.na(data_full)] <- -110
-
-#Changing timestamp variables to factor using a For
-#### Ignacio: This is ok, but you need to be cautious in doing this step as
-#### the "as.factor" function ONLY "see" the values it takes the variable
-#### enclosed within parentehses. Thus, if in a new dataset you have more 
-#### posible values than in you sampled data, you will get an error.
-vars_to_factor <- c("HighWAP", "HighWAP2", "HighWAP3", "HighWAP4")
-for (v in vars_to_factor) {
-#  data_full[,v] <- as.factor(data_full[,v])
-   data_full[,v] <- factor(data_full[,v],levels = colnames(data_full[,1:520]),
-                           labels = colnames(data_full[,1:520]))
-}
-rm(vars_to_factor)
-
-# reorder columns 
-last_col <- c(521:530)
-data_full <-  data_full %>% select(last_col, everything())
-rm(last_col)
+# #Removing unnecessary columns
+# vars_to_delete <- c("SPACEID", "RELATIVEPOSITION", "USERID", "PHONEID", "TIMESTAMP")
+# for (c in vars_to_delete) {
+#   data_full[,vars_to_delete] <- NULL
+# }
+# rm(vars_to_delete)
+# 
+# 
+# # remove WAP_num because I don't need this variable anymore
+# data_full$WAP_num <- NULL
+# 
+# 
+# ##creating a column with the highest WAP and highest Signal detected.
+# #### Ignacio: This is the way to get all the columns which names contains the 
+# #### the word "WAP"
+# WAPS<-grep("WAP", names(data_full), value=T) #value = TRUE returns the values instead of the vectors
+# 
+# # Create new variables HighWAP and HighRSSI
+# data_full<-data_full %>%
+#   mutate(HighWAP=NA)
+# 
+# #gets which columns has the highest value for a fingerprint
+# data_full<-data_full %>% 
+#   mutate(HighWAP=colnames(data_full[WAPS])[apply(data_full[WAPS],1,which.max)])
+# 
+# #Function to find 1st, 2nd, 3rd highest WAPs and RSSI values 
+# maxn <- function(n) function(x) order(x, decreasing = TRUE)[n]
+# 
+# #Set 2nd highest WAP number
+# data_full <- data_full %>% 
+#   mutate(HighWAP2=colnames(data_full[WAPS])[apply(data_full[WAPS],1,maxn(2))])
+# 
+# #Set 3rd highest WAP number
+# data_full<-data_full %>% 
+#   mutate(HighWAP3=colnames(data_full[WAPS])[apply(data_full[WAPS],1,maxn(3))])
+# 
+# #Set 4th highest WAP number
+# data_full<-data_full %>% 
+#   mutate(HighWAP4=colnames(data_full[WAPS])[apply(data_full[WAPS],1,maxn(4))])
+# 
+# #convert NA's to -110
+# data_full[is.na(data_full)] <- -110
+# 
+# #Changing timestamp variables to factor using a For
+# #### Ignacio: This is ok, but you need to be cautious in doing this step as
+# #### the "as.factor" function ONLY "see" the values it takes the variable
+# #### enclosed within parentehses. Thus, if in a new dataset you have more 
+# #### posible values than in you sampled data, you will get an error.
+# vars_to_factor <- c("HighWAP", "HighWAP2", "HighWAP3", "HighWAP4")
+# for (v in vars_to_factor) {
+# #  data_full[,v] <- as.factor(data_full[,v])
+#    data_full[,v] <- factor(data_full[,v],levels = colnames(data_full[,1:520]),
+#                            labels = colnames(data_full[,1:520]))
+# }
+# rm(vars_to_factor)
+# 
+# # reorder columns 
+# last_col <- c(521:530)
+# data_full <-  data_full %>% select(last_col, everything())
+# rm(last_col)
 
 #saving data_full in case I have to reload the 
 #saveRDS(data_full, file = "WiFi_Locationing/data/data_full.rds")
